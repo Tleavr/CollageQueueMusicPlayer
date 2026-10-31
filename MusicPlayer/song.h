@@ -17,12 +17,16 @@ struct Song {
         : title(t), artist(a), filePath(path), durationInSeconds(duration) {
     }
 
-    // تنسيق المدة (MM:SS)
+    // تنسيق المدة (MM:SS أو H:MM:SS إذا تجاوزت ساعة)
     std::string getFormattedDuration() const {
-        int minutes = durationInSeconds / 60;
+        int hours = durationInSeconds / 3600;
+        int minutes = (durationInSeconds % 3600) / 60;
         int seconds = durationInSeconds % 60;
-        char buffer[10];
-        std::snprintf(buffer, sizeof(buffer), "%02d:%02d", minutes, seconds);
+        char buffer[24];
+        if (hours > 0)
+            std::snprintf(buffer, sizeof(buffer), "%d:%02d:%02d", hours, minutes, seconds);
+        else
+            std::snprintf(buffer, sizeof(buffer), "%02d:%02d", minutes, seconds);
         return std::string(buffer);
     }
 };

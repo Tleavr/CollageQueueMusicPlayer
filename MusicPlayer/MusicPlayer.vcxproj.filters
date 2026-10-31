@@ -35,5 +35,8 @@
     <ClInclude Include="song.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="clay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

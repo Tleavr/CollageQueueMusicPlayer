@@ -1,72 +1,126 @@
 #include "playlist.h"
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 
-// 1. Add Song
+// 1. Add Song: enqueue to the end of the playlist
 void Playlist::addSong(const Song& song) {
     songQueue.push(song);
 }
 
-// 2. Play Next (حذف الحالية من المقدمة)
-void Playlist::nextSong() {
-    if (!songQueue.empty()) {
-        songQueue.pop();
+// 2. Play Next: dequeue the song at the front and play it
+bool Playlist::nextSong() {
+    if (songQueue.empty()) {
+        hasNowPlaying = false;      // nothing left to play
+        return false;
     }
+    nowPlaying = songQueue.front();
+    songQueue.pop();
+    hasNowPlaying = true;
+    return true;
 }
 
-// 3. View Next Song (Peek)
+// 3. View Next Song: peek without removing
 Song Playlist::peekNextSong() const {
-    if (!songQueue.empty()) {
-        return songQueue.front();
-    }
+    if (!songQueue.empty()) return songQueue.front();
     return Song("No Song", "Unknown", "", 0);
 }
 
-Song Playlist::getCurrentSong() const {
-    return peekNextSong();
+bool Playlist::hasNextSong() const {
+    return !songQueue.empty();
 }
 
-// 4. Display Playlist (نسخ الطابور إلى Vector للعرض دون إتلاف الطابور الأصلي)
+Song Playlist::getCurrentSong() const {
+    if (hasNowPlaying) return nowPlaying;
+    return Song("No Song", "Unknown", "", 0);
+}
+
+bool Playlist::hasCurrentSong() const {
+    return hasNowPlaying;
+}
+
+// 4. Display Playlist: copy the queue so the original is not destroyed
 std::vector<Song> Playlist::getAllSongs() const {
-    std::vector<Song> songsList;
-    std::queue<Song> tempQueue = songQueue;
-    while (!tempQueue.empty()) {
-        songsList.push_back(tempQueue.front());
-        tempQueue.pop();
+    std::vector<Song> list;
+    if (hasNowPlaying) list.push_back(nowPlaying);
+    std::queue<Song> temp = songQueue;
+    while (!temp.empty()) {
+        list.push_back(temp.front());
+        temp.pop();
     }
-    return songsList;
+    return list;
 }
 
 // 5. Clear Playlist
 void Playlist::clearPlaylist() {
-    while (!songQueue.empty()) {
-        songQueue.pop();
-    }
+    while (!songQueue.empty()) songQueue.pop();
+    hasNowPlaying = false;
 }
 
-// 6. Playlist Statistics (الإحصائيات)
+// 6. Playlist Statistics
 size_t Playlist::getSongCount() const {
-    return songQueue.size();
+    return songQueue.size() + (hasNowPlaying ? 1 : 0);
 }
 
 int Playlist::getTotalDurationSeconds() const {
-    int total = 0;
-    std::queue<Song> tempQueue = songQueue;
-    while (!tempQueue.empty()) {
-        total += tempQueue.front().durationInSeconds;
-        tempQueue.pop();
+    int total = hasNowPlaying ? nowPlaying.durationInSeconds : 0;
+    std::queue<Song> temp = songQueue;
+    while (!temp.empty()) {
+        total += temp.front().durationInSeconds;
+        temp.pop();
     }
     return total;
 }
 
+// Total duration as HH:MM:SS
 std::string Playlist::getFormattedTotalDuration() const {
-    int totalSecs = getTotalDurationSeconds();
-    int minutes = totalSecs / 60;
-    int seconds = totalSecs % 60;
-    char buffer[15];
-    std::snprintf(buffer, sizeof(buffer), "%02d:%02d", minutes, seconds);
+    int t = getTotalDurationSeconds();
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", t / 3600, (t % 3600) / 60, t % 60);
     return std::string(buffer);
 }
 
 bool Playlist::isEmpty() const {
-    return songQueue.empty();
+    return songQueue.empty() && !hasNowPlaying;
+}
+
+// ---------------- Save / Load ----------------
+// File format: each line = path <TAB> title <TAB> artist <TAB> duration
+static std::string CleanField(std::string s) {
+    for (char& ch : s) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
+    return s;
+}
+
+bool Playlist::saveToFile(const std::string& filePath) const {
+    std::ofstream out(filePath, std::ios::trunc);
+    if (!out) return false;
+    for (const Song& s : getAllSongs()) {
+        out << CleanField(s.filePath) << '\t' << CleanField(s.title) << '\t'
+            << CleanField(s.artist) << '\t' << s.durationInSeconds << '\n';
+    }
+    return true;
+}
+
+void Playlist::loadFromFile(const std::string& filePath) {
+    std::ifstream in(filePath);
+    if (!in) return;                       // first run: no file yet, that's fine
+
+    clearPlaylist();
+
+    std::string line;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::vector<std::string> parts;
+        std::stringstream ss(line);
+        std::string part;
+        while (std::getline(ss, part, '\t')) parts.push_back(part);
+        if (parts.size() < 4) continue;    // broken line, ignore
+
+        std::ifstream audioFile(parts[0], std::ios::binary);
+        if (!audioFile) continue;          // the music file was moved or deleted
+
+        int duration = std::atoi(parts[3].c_str());
+        songQueue.push(Song(parts[1], parts[2], parts[0], duration));
+    }
 }
