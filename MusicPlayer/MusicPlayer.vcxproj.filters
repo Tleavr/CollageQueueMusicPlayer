@@ -27,6 +27,15 @@
     <ClCompile Include="playlist.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="file_dialog.h">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="file_dialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="audio.h">
@@ -36,6 +45,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="clay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

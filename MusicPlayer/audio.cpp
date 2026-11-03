@@ -63,10 +63,6 @@ bool IsSongFinished() {
     return isMusicLoaded && !isPaused && !IsMusicStreamPlaying(music);
 }
 
-float GetSongTimePlayed() {
-    return isMusicLoaded ? GetMusicTimePlayed(music) : 0.0f;
-}
-
 int GetAudioFileDuration(const std::string& filePath) {
     Music tmp = LoadMusicStream(filePath.c_str());
     if (tmp.stream.buffer == NULL) return 0;

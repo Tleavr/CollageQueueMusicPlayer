@@ -156,13 +156,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="audio.cpp" />
+    <ClCompile Include="file_dialog.cpp" />
+    <ClCompile Include="file_dialog.h" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="playlist.cpp" />
     <ClCompile Include="playlist.h" />
+    <ClCompile Include="renderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="audio.h" />
     <ClInclude Include="clay.h" />
+    <ClInclude Include="renderer.h" />
     <ClInclude Include="song.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -13,7 +13,6 @@ void  StopAndCleanupAudio();
 
 bool  IsSongLoaded();
 bool  IsSongFinished();                        // true once the song reached its end
-float GetSongTimePlayed();                     // seconds
 int   GetAudioFileDuration(const std::string& filePath); // seconds, 0 if file can't be opened
 
 #endif // AUDIO_H

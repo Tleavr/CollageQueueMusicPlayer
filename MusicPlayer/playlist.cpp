@@ -3,14 +3,22 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
-// 1. Add Song: enqueue to the end of the playlist
+// ---------------- Core queue operations ----------------
+
+// 1. Add Song: enqueue to the end of the playlist                      O(1)
 void Playlist::addSong(const Song& song) {
     songQueue.push(song);
+    totalSeconds += song.durationInSeconds;
 }
 
-// 2. Play Next: dequeue the song at the front and play it
+// 2. Play Next: dequeue the song at the front and play it              O(1)
+// The song that was playing leaves the playlist, so its duration is removed
+// from the running total. The dequeued song stays counted (it is now nowPlaying).
 bool Playlist::nextSong() {
+    if (hasNowPlaying) totalSeconds -= nowPlaying.durationInSeconds;
+
     if (songQueue.empty()) {
         hasNowPlaying = false;      // nothing left to play
         return false;
@@ -21,7 +29,7 @@ bool Playlist::nextSong() {
     return true;
 }
 
-// 3. View Next Song: peek without removing
+// 3. View Next Song: peek without removing                             O(1)
 Song Playlist::peekNextSong() const {
     if (!songQueue.empty()) return songQueue.front();
     return Song("No Song", "Unknown", "", 0);
@@ -40,9 +48,14 @@ bool Playlist::hasCurrentSong() const {
     return hasNowPlaying;
 }
 
-// 4. Display Playlist: copy the queue so the original is not destroyed
+// ---------------- Display ----------------
+
+// 4. Display Playlist: playing song first, then the queue in order      O(n)
+// A std::queue can't be iterated, so we copy it and empty the COPY.
+// The original queue is never touched.
 std::vector<Song> Playlist::getAllSongs() const {
     std::vector<Song> list;
+    list.reserve(getSongCount());
     if (hasNowPlaying) list.push_back(nowPlaying);
     std::queue<Song> temp = songQueue;
     while (!temp.empty()) {
@@ -52,25 +65,22 @@ std::vector<Song> Playlist::getAllSongs() const {
     return list;
 }
 
-// 5. Clear Playlist
+// 5. Clear Playlist                                                     O(n)
 void Playlist::clearPlaylist() {
-    while (!songQueue.empty()) songQueue.pop();
+    std::queue<Song> empty;
+    std::swap(songQueue, empty);    // releases all the songs at once
     hasNowPlaying = false;
+    totalSeconds = 0;
 }
 
-// 6. Playlist Statistics
+// ---------------- 6. Statistics (all O(1)) ----------------
+
 size_t Playlist::getSongCount() const {
     return songQueue.size() + (hasNowPlaying ? 1 : 0);
 }
 
 int Playlist::getTotalDurationSeconds() const {
-    int total = hasNowPlaying ? nowPlaying.durationInSeconds : 0;
-    std::queue<Song> temp = songQueue;
-    while (!temp.empty()) {
-        total += temp.front().durationInSeconds;
-        temp.pop();
-    }
-    return total;
+    return totalSeconds;
 }
 
 // Total duration as HH:MM:SS
@@ -121,6 +131,7 @@ void Playlist::loadFromFile(const std::string& filePath) {
         if (!audioFile) continue;          // the music file was moved or deleted
 
         int duration = std::atoi(parts[3].c_str());
-        songQueue.push(Song(parts[1], parts[2], parts[0], duration));
+        if (duration < 0) duration = 0;    // protect the total from corrupted data
+        addSong(Song(parts[1], parts[2], parts[0], duration));   // keeps totalSeconds correct
     }
 }

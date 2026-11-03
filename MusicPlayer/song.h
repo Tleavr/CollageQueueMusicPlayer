@@ -5,10 +5,10 @@
 #include <cstdio>
 
 struct Song {
-    std::string title;     // اسم الأغنية
-    std::string artist;    // اسم الفنان
-    std::string filePath;  // مسار الملف الصوتي
-    int durationInSeconds; // مدة الأغنية بالثواني
+    std::string title;      // song name
+    std::string artist;     // artist name
+    std::string filePath;   // path of the audio file
+    int durationInSeconds;  // song length in seconds
 
     Song(const std::string& t = "",
         const std::string& a = "",
@@ -17,7 +17,7 @@ struct Song {
         : title(t), artist(a), filePath(p), durationInSeconds(d) {
     }
 
-    //  H:MM:SS 
+    // H:MM:SS
     std::string getFormattedDuration() const {
         int hours = durationInSeconds / 3600;
         int minutes = (durationInSeconds % 3600) / 60;
@@ -27,5 +27,22 @@ struct Song {
         return std::string(buffer);
     }
 };
+
+// "C:\music\Artist - Title.mp3"  ->  title = "Title", artist = "Artist"
+inline Song MakeSongFromPath(const std::string& path, int duration)
+{
+    size_t slash = path.find_last_of("/\\");
+    std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
+    size_t dot = name.find_last_of('.');
+    if (dot != std::string::npos) name = name.substr(0, dot);
+
+    std::string artist = "Unknown";
+    size_t dash = name.find(" - ");
+    if (dash != std::string::npos) {
+        artist = name.substr(0, dash);
+        name = name.substr(dash + 3);
+    }
+    return Song(name, artist, path, duration);
+}
 
 #endif // SONG_H

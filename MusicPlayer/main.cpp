@@ -1,46 +1,19 @@
 #define CLAY_IMPLEMENTATION
-#include "clay.h" 
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-// Prevent Win32 names from colliding with Raylib names.
-#define Rectangle Win32GdiRectangle
-#define CloseWindow Win32CloseWindow
-#define ShowCursor Win32ShowCursor
-#define DrawTextW Win32DrawTextW
-#define DrawTextA Win32DrawTextA
-#define DrawTextExW Win32DrawTextExW
-#define DrawTextExA Win32DrawTextExA
-#define LoadImageW Win32LoadImageW
-#define LoadImageA Win32LoadImageA
-#include <windows.h>
-#include <commdlg.h>
-#undef Rectangle
-#undef CloseWindow
-#undef ShowCursor
-#undef DrawTextW
-#undef DrawTextA
-#undef DrawTextExW
-#undef DrawTextExA
-#undef LoadImageW
-#undef LoadImageA
-#undef DrawText
-#undef DrawTextEx
-#undef LoadImage
-#endif
+#include "clay.h"
 
 #include "raylib.h"
 #include "song.h"
 #include "audio.h"
 #include "playlist.h"
+#include "file_dialog.h"
+#include "renderer.h"
 
 #include <cmath>
 #include <cstdint>
-#include <vector>
 #include <cstdlib>
 #include <deque>
 #include <string>
+#include <vector>
 
 // -----------------------------
 // Window / theme configuration
@@ -58,10 +31,6 @@ static const Clay_Color UI_ACCENT = { 155, 164, 205, 255 };
 static const Clay_Color UI_HOVER = { 74, 80, 96, 255 };
 static const Clay_Color UI_NONE = { 0, 0, 0, 0 };
 
-// Icon ids passed to the renderer through .custom.customData
-enum Icon : int { ICON_PREV = 1, ICON_PLAY, ICON_PAUSE, ICON_NEXT };
-static int iconPrev = ICON_PREV, iconPlay = ICON_PLAY, iconPause = ICON_PAUSE, iconNext = ICON_NEXT;
-
 // Clay does NOT copy text, so every string must stay alive until Clay_EndLayout().
 // A deque never invalidates references when we push_back, so it is safe to hand out pointers.
 static std::deque<std::string> g_frameStrings;
@@ -78,98 +47,6 @@ static Clay_String ClayStr(const char* value)   // string literals only
     int32_t length = 0;
     while (value && value[length] != '\0') ++length;
     return Clay_String{ true, length, value };
-}
-
-static Clay_Dimensions MeasureTextCustom(Clay_StringSlice text, Clay_TextElementConfig* config, void* userData)
-{
-    Font* font = static_cast<Font*>(userData);
-    std::string value(text.chars, text.length);
-    Vector2 size = MeasureTextEx(*font, value.c_str(),
-        static_cast<float>(config->fontSize), static_cast<float>(config->letterSpacing));
-    return Clay_Dimensions{ size.x, size.y };
-}
-
-static std::string OpenMusicFileDialog()
-{
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA dialog = {};
-    dialog.lStructSize = sizeof(dialog);
-    dialog.lpstrFilter =
-        "Audio Files (*.mp3;*.wav;*.ogg)\0*.mp3;*.wav;*.ogg\0"
-        "All Files (*.*)\0*.*\0";
-    dialog.lpstrFile = filename;
-    dialog.nMaxFile = MAX_PATH;
-    dialog.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-    if (GetOpenFileNameA(&dialog)) return filename;
-#endif
-    return {};
-}
-
-// "C:\music\Artist - Title.mp3"  ->  title = "Title", artist = "Artist"
-static Song MakeSongFromPath(const std::string& path, int duration)
-{
-    size_t slash = path.find_last_of("/\\");
-    std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
-    size_t dot = name.find_last_of('.');
-    if (dot != std::string::npos) name = name.substr(0, dot);
-
-    std::string artist = "Unknown";
-    size_t dash = name.find(" - ");
-    if (dash != std::string::npos) {
-        artist = name.substr(0, dash);
-        name = name.substr(dash + 3);
-    }
-    return Song(name, artist, path, duration);
-}
-
-// Draws the play / pause / prev / next glyphs inside a Clay bounding box
-static void DrawIcon(int icon, Clay_BoundingBox b)
-{
-    const float s = (b.width < b.height ? b.width : b.height);
-    const float cx = b.x + b.width / 2, cy = b.y + b.height / 2;
-    const Color c = { 244, 245, 248, 255 };
-    const float h = s * 0.5f, w = s * 0.45f;   // triangle size
-    const float o = s * 0.04f, bar = s * 0.07f; // small shift / bar thickness
-
-    switch (icon) {
-    case ICON_PLAY:
-        DrawTriangle({ cx - w / 2 + o, cy - h / 2 }, { cx - w / 2 + o, cy + h / 2 }, { cx + w / 2 + o, cy }, c);
-        break;
-    case ICON_PAUSE:
-        DrawRectangleRec({ cx - h * 0.3f, cy - h / 2, h * 0.2f, h }, c);
-        DrawRectangleRec({ cx + h * 0.1f, cy - h / 2, h * 0.2f, h }, c);
-        break;
-    case ICON_NEXT:   // |▶  mirrored: ▶|
-        DrawTriangle({ cx - w / 2 - o, cy - h / 2 }, { cx - w / 2 - o, cy + h / 2 }, { cx + w / 2 - o, cy }, c);
-        DrawRectangleRec({ cx + w / 2 - o, cy - h / 2, bar, h }, c);
-        break;
-    case ICON_PREV:   // |◀
-        DrawTriangle({ cx + w / 2 + o, cy - h / 2 }, { cx - w / 2 + o, cy }, { cx + w / 2 + o, cy + h / 2 }, c);
-        DrawRectangleRec({ cx - w / 2 - o, cy - h / 2, bar, h }, c);
-        break;
-    }
-}
-
-static float RoundnessFor(float radius, const Clay_BoundingBox& b)
-{
-    // raylib: radius = min(w,h) * roundness / 2
-    const float m = (b.width < b.height ? b.width : b.height);
-    if (m <= 0.0f || radius <= 0.0f) return 0.0f;
-    float r = radius * 2.0f / m;
-    return r > 1.0f ? 1.0f : r;
-}
-
-static Color ToColor(Clay_Color c)
-{
-    return Color{ (unsigned char)c.r, (unsigned char)c.g, (unsigned char)c.b, (unsigned char)c.a };
-}
-
-static std::string FormatTime(int seconds)
-{
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%02d:%02d", seconds / 60, seconds % 60);
-    return buf;
 }
 
 // One cell of the table (header or row): same GROW(1) width everywhere so columns line up
@@ -206,13 +83,16 @@ int main()
     else { GenTextureMipmaps(&customFont.texture); SetTextureFilter(customFont.texture, TEXTURE_FILTER_TRILINEAR); }
 
     const uint64_t clayMemorySize = Clay_MinMemorySize();
-    Clay_Arena clayMemory = Clay_CreateArenaWithCapacityAndMemory(clayMemorySize, std::malloc(clayMemorySize));
+    void* clayBuffer = std::malloc(clayMemorySize);
+    Clay_Arena clayMemory = Clay_CreateArenaWithCapacityAndMemory(clayMemorySize, clayBuffer);
     Clay_ErrorHandler errorHandler = { nullptr, nullptr };
     Clay_Initialize(clayMemory,
         Clay_Dimensions{ (float)GetScreenWidth(), (float)GetScreenHeight() }, errorHandler);
     Clay_SetMeasureTextFunction(MeasureTextCustom, &customFont);
 
     bool isPlaying = false;
+
+    auto save = [&]() { playlist.saveToFile(savePath); };
 
     // Start playing the current song (or stop if the playlist is empty)
     auto playCurrent = [&]() {
@@ -224,7 +104,7 @@ int main()
     auto goNext = [&]() {
         playlist.nextSong();
         playCurrent();
-        playlist.saveToFile(savePath);
+        save();
         };
 
     while (!WindowShouldClose())
@@ -248,7 +128,7 @@ int main()
         const bool playHovered = Clay_PointerOver(CLAY_ID("PlayPauseBtn"));
         const bool nextHovered = Clay_PointerOver(CLAY_ID("NextBtn"));
 
-        if (click && clearHovered) { playlist.clearPlaylist(); UnloadSong(); isPlaying = false; playlist.saveToFile(savePath); }
+        if (click && clearHovered) { playlist.clearPlaylist(); UnloadSong(); isPlaying = false; save(); }
 
         if (click && addHovered) {
             std::string path = OpenMusicFileDialog();
@@ -257,7 +137,7 @@ int main()
                 if (duration > 0) {
                     bool wasEmpty = playlist.isEmpty();
                     playlist.addSong(MakeSongFromPath(path, duration));
-                    playlist.saveToFile(savePath);
+                    save();
                     if (wasEmpty) goNext();          // first song starts automatically
                 }
             }
@@ -293,7 +173,6 @@ int main()
         Clay_TextElementConfig timeStyle = Style(UI_WHITE, 26);
 
         std::vector<Song> songs = playlist.getAllSongs();
-        const bool hasSong = !songs.empty();
         const bool hasCurrent = playlist.hasCurrentSong();
         const Song currentSong = playlist.getCurrentSong();
         const bool hasNext = playlist.hasNextSong();
@@ -492,60 +371,14 @@ int main()
 
         Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
-        // ================= Raylib renderer =================
-        BeginDrawing();
-        ClearBackground({ 15, 17, 21, 255 });
 
-        for (int32_t i = 0; i < commands.length; ++i)
-        {
-            Clay_RenderCommand* cmd = Clay_RenderCommandArray_Get(&commands, i);
-            const Clay_BoundingBox bb = cmd->boundingBox;
-            const Rectangle rec = { bb.x, bb.y, bb.width, bb.height };
-
-            switch (cmd->commandType)
-            {
-            case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: {
-                auto* d = &cmd->renderData.rectangle;
-                if (d->cornerRadius.topLeft > 0.0f)
-                    DrawRectangleRounded(rec, RoundnessFor(d->cornerRadius.topLeft, bb), 24, ToColor(d->backgroundColor));
-                else
-                    DrawRectangleRec(rec, ToColor(d->backgroundColor));
-                break;
-            }
-            case CLAY_RENDER_COMMAND_TYPE_BORDER: {
-                auto* d = &cmd->renderData.border;
-                DrawRectangleRoundedLinesEx(rec, RoundnessFor(d->cornerRadius.topLeft, bb), 24,
-                    (float)d->width.left, ToColor(d->color));
-                break;
-            }
-            case CLAY_RENDER_COMMAND_TYPE_TEXT: {
-                auto* d = &cmd->renderData.text;
-                std::string value(d->stringContents.chars, d->stringContents.length);
-                DrawTextEx(customFont, value.c_str(), { bb.x, bb.y },
-                    (float)d->fontSize, (float)d->letterSpacing, ToColor(d->textColor));
-                break;
-            }
-            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START:
-                BeginScissorMode((int)bb.x, (int)bb.y, (int)bb.width, (int)bb.height);
-                break;
-            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END:
-                EndScissorMode();
-                break;
-            case CLAY_RENDER_COMMAND_TYPE_CUSTOM: {
-                auto* d = &cmd->renderData.custom;
-                if (d->customData) DrawIcon(*static_cast<int*>(d->customData), bb);
-                break;
-            }
-            default: break;
-            }
-        }
-
-        EndDrawing();
+        RenderClayCommands(commands, customFont);
     }
 
-    playlist.saveToFile(savePath);
+    save();
     UnloadFont(customFont);
     StopAndCleanupAudio();
+    std::free(clayBuffer);
     CloseWindow();
     return 0;
 }
