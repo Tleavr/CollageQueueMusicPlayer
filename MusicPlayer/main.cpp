@@ -21,7 +21,7 @@
 static constexpr int SCREEN_WIDTH = 810;
 static constexpr int SCREEN_HEIGHT = 530;
 
-static const Clay_Color UI_BG = { 52, 56, 64, 255 };
+static const Clay_Color UI_BG = { 18, 18, 18, 250 };
 static const Clay_Color UI_PANEL = { 43, 46, 54, 255 };
 static const Clay_Color UI_ROW_ACTIVE = { 62, 67, 80, 255 };
 static const Clay_Color UI_BORDER = { 133, 139, 164, 255 };
